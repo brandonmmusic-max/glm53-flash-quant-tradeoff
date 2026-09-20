@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLM-5.3-Flash on 4x RTX PRO 6000: TrellisMX-MXFP8 vs TR3/EXL3 4bpw vs stock NVFP4</title>
+<style>
+  :root { color-scheme: light; }
+  .viz-root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;   /* TrellisMX */
+    --series-2:       #eb6834;   /* TR3 / EXL3 */
+    --series-3:       #1baf7a;   /* stock NVFP4 */
+    --delta-good:     #006300;
+    --delta-bad:      #d03b3b;
+    --frontier:       #c3c2b7;
+    --tip-bg:         #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+      --text-muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+      --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+      --delta-good: #0ca30c; --delta-bad: #e66767; --frontier: #4a4a46; --tip-bg: #242423;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface-1: #1a1a19; --text-primary: #ffffff; --text-secondary: #c3c2b7;
+    --text-muted: #898781; --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
+    --delta-good: #0ca30c; --delta-bad: #e66767; --frontier: #4a4a46; --tip-bg: #242423;
+  }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--page); }
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-primary);
+    background: var(--page);
+    max-width: 1600px; margin: 0 auto; padding: 28px 32px 40px;
+    font-size: 14px; line-height: 1.4;
+  }
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 18px; }
+  h1 { font-size: 24px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--text-secondary); font-size: 14px; margin: 0; max-width: 1100px; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+  .controls button {
+    font: inherit; font-size: 13px; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  .controls button[aria-pressed="true"] { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 14px 0 18px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .tile .label { color: var(--text-secondary); font-size: 13px; }
+  .tile .value { font-size: 34px; font-weight: 600; margin: 4px 0 2px; }
+  .tile .unit { font-size: 14px; color: var(--text-secondary); font-weight: 400; margin-left: 4px; }
+  .tile .deltas { display: flex; gap: 14px; font-size: 13px; color: var(--text-secondary); flex-wrap: wrap; }
+  .tile .deltas b { font-weight: 600; }
+  .tile .good { color: var(--delta-good); }
+  .tile .bad  { color: var(--delta-bad); }
+  .grid { display: grid; grid-template-columns: 3fr 2fr; gap: 14px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px 10px; min-width: 0; }
+  .card h2 { font-size: 15px; font-weight: 600; margin: 0 0 2px; }
+  .card .desc { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 8px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12.5px; color: var(--text-secondary); margin: 4px 0 6px; }
+  .legend .item { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+  .legend .item.toggle { cursor: pointer; }
+  .legend .item.off { opacity: 0.4; }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .legend .lk { width: 22px; height: 0; border-top: 2px solid; display: inline-block; }
+  .legend .lk.dash { border-top-style: dashed; }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .legend .dot.hollow { background: var(--surface-1) !important; border: 2px solid; width: 8px; height: 8px; }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: inherit; }
+  .axis text { fill: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .axis line, .axis path { stroke: var(--axis); stroke-width: 1; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axis-title { fill: var(--text-secondary); font-size: 12px; }
+  .dlabel { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+  .dlabel2 { fill: var(--text-secondary); font-size: 11.5px; }
+  .note { fill: var(--text-muted); font-size: 11px; }
+  .mark { cursor: pointer; }
+  .mark:focus { outline: none; }
+  .mark:focus .ring, .mark:hover .ring { stroke-width: 3; }
+  .bar:hover, .bar:focus { filter: brightness(1.12); }
+  .tooltip {
+    position: fixed; z-index: 10; pointer-events: none; background: var(--tip-bg); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12); max-width: 360px; display: none;
+  }
+  .tooltip .row { display: flex; gap: 8px; align-items: baseline; }
+  .tooltip .row .k { width: 18px; height: 0; border-top: 2px solid; display: inline-block; flex-shrink: 0; position: relative; top: -3px; }
+  .tooltip .row .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tooltip .row .n { color: var(--text-secondary); }
+  .tooltip .hd { font-weight: 600; margin-bottom: 4px; }
+  .tooltip .ft { color: var(--text-secondary); margin-top: 4px; font-size: 11.5px; }
+  .notes { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .notes ol, .notes ul { margin: 6px 0 0; padding-left: 20px; color: var(--text-secondary); font-size: 12.5px; }
+  .notes li { margin-bottom: 5px; }
+  .notes a { color: inherit; }
+  .notes code { font-size: 11.5px; }
+  table.data { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; margin-top: 8px; }
+  table.data th, table.data td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  table.data th { color: var(--text-secondary); font-weight: 600; }
+  table.data td.num, table.data th.num { text-align: right; }
+  .tables { display: none; }
+  .viz-root[data-view="table"] .charts { display: none; }
+  .viz-root[data-view="table"] .tables { display: block; }
+  .sr { position: absolute; left: -9999px; }
+  @media (max-width: 1100px) { .grid, .grid2, .kpis, .notes { grid-template-columns: 1fr; } }
+  @media print { .controls { display: none; } .card, .tile { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="viz-root" id="root" data-view="charts">
+  <header>
+    <div>
+      <h1>GLM-5.3-Flash on four RTX PRO 6000 Blackwell GPUs: TrellisMX-MXFP8 sits between TR3/EXL3 4bpw and stock NVFP4</h1>
+      <p class="sub">Each family is shown at its published reference serving stack on the same rig. Fidelity is KL(BF16 ‖ student) on the same 32 conditional-fit windows, lower is better. Speed is <code>llm_decode_bench</code> tokens/s, single request (C1) unless marked. Speculators, GPU counts and KV cache formats differ between families; see notes.</p>
+    </div>
+    <div class="controls">
+      <button id="btn-view" aria-pressed="false" title="Switch between the charts and a table of every number">Table view</button>
+      <button id="btn-theme" aria-pressed="false" title="Toggle light / dark">Dark</button>
+    </div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="charts">
+    <div class="grid">
+      <div class="card">
+        <h2>Speed versus fidelity</h2>
+        <p class="desc">C1 decode at nominal 0K context (x) against mean KLD with the KV cache each speed run actually served (y, BCa 95% whiskers). Hollow markers show the same checkpoint scored with FP8 KV. The gray line joins the three reference points.</p>
+        <div class="legend" id="legend-scatter"></div>
+        <div id="scatter"></div>
+      </div>
+      <div class="card">
+        <h2>Fidelity: mean KLD versus the BF16 teacher</h2>
+        <p class="desc">Same 32 windows, same teacher logits, same token histories, CPU FP64 scoring. Whiskers are BCa 95% intervals over windows. Stock NVFP4 was scored on the same windows but through a different capture path (note 2).</p>
+        <div class="legend" id="legend-kld"></div>
+        <div id="kldbars"></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h2>Single-request decode across context length</h2>
+        <p class="desc">C1 sustained decode tokens/s by nominal context. Solid lines are the published reference configuration of each family; dashed lines are the alternate configuration measured on this rig. Click a legend entry to hide or show it.</p>
+        <div class="legend" id="legend-lines"></div>
+        <div id="lines"></div>
+      </div>
+      <div class="card">
+        <h2>Cold prefill throughput</h2>
+        <p class="desc">Client-measured prompt tokens/s on standalone cold prefill. TR3 at 128K comes from the local v93 run (near-128K prompt); its 32K and 64K cells are the published v84 card values.</p>
+        <div class="legend" id="legend-prefill"></div>
+        <div id="prefill"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tables" id="tables"></div>
+
+  <div class="notes">
+    <div class="card">
+      <h2>How to read this</h2>
+      <ol id="notes-list"></ol>
+    </div>
+    <div class="card">
+      <h2>Sources</h2>
+      <ul id="sources-list"></ul>
+    </div>
+  </div>
+  <div class="tooltip" id="tooltip" role="status" aria-live="polite"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// DATA: every number below is copied from a receipt; the source is named per row.
+// ---------------------------------------------------------------------------
+const FAM = {
+  mx:  { key: "mx",  name: "TrellisMX-MXFP8", short: "TrellisMX", color: "var(--series-1)",
+         detail: "coupled 17×K5 / 25×K4 routed experts, native E4M3 FP8 MMA, 4.659 routed bits/weight" },
+  tr3: { key: "tr3", name: "TR3 / EXL3 4bpw", short: "TR3/EXL3", color: "var(--series-2)",
+         detail: "uniform K4 EXL3 routed experts, W4A16, 4.0 routed bits/weight" },
+  nv:  { key: "nv",  name: "Stock NVFP4", short: "NVFP4", color: "var(--series-3)",
+         detail: "local-inference-lab/GLM-5.3-Flash-NVFP4 @520de24e (PTQ carrier), E2M1 + E4M3/16 scales, 4.5 nominal bits/weight" },
+};
+
+const KLD = [
+  { fam: "tr3", kv: "FP8",   mean: 0.0281899278, lo: 0.0242021615, hi: 0.0333599527, path: "true-decode, 2,046 rows/window, MTP off, r10 TP4/EP4/DCP4", src: "results/kld-tr3-20260909/comparison.json (HF TrellisMX repo)" },
+  { fam: "tr3", kv: "NVFP4", mean: 0.0304785381, lo: 0.0263260967, hi: 0.0357044163, path: "true-decode, 2,046 rows/window, MTP off, r10 TP4/EP4/DCP4", src: "results/kld-tr3-20260909/comparison.json (HF TrellisMX repo)" },
+  { fam: "mx",  kv: "FP8",   mean: 0.0319451732, lo: 0.0268267482, hi: 0.0387948613, path: "true-decode, 2,046 rows/window, MTP off, r27 reference TP4/DCP4", src: "results/kld-reference-20260909/comparison.json (HF TrellisMX repo)" },
+  { fam: "mx",  kv: "NVFP4", mean: 0.0354562238, lo: 0.0295558848, hi: 0.0434620368, path: "true-decode, 2,046 rows/window, MTP off, r27 reference TP4/DCP4", src: "results/kld-reference-20260909/comparison.json (HF TrellisMX repo)" },
+  { fam: "nv",  kv: "FP8",   mean: 0.0397885516, lo: 0.0334620, hi: 0.0484880, path: "single 2,048-token prefill pass, eager, Humming MoE, TP4/noEP/DCP4, MTP off (2026-09-05)", src: "run-trellismx-p8-rot3-cf32-stock-v1.json; cited in results/P8_FULL_COUPLED_CAMPAIGN_RESULTS_20260906.md (GitHub)", other: [0.0389264261, 0.0384504946], otherSrc: "results/rotation-v6-blocklocal-h16/run-stock-cf32-v3.json and results/rotation-v7-selective-h16/run-stock-cf32-v1.json (GitHub), TP4/EP4/DCP4" },
+];
+
+const PAIRED = {
+  tr3_minus_mx_fp8:   { d: -0.0037552454, lo: -0.0074398857, hi: 0.0003455970, wins: "TR3 lower in 22/32 windows" },
+  tr3_minus_mx_nvfp4: { d: -0.0049776857, lo: -0.0106713946, hi: -0.0008185255, wins: "TR3 lower in 22/32 windows" },
+  mx_fp8_minus_nvfp4kv: { d: -0.0035110506, lo: -0.0081718772, hi: -0.0013675941, wins: "FP8 lower in 22/32 windows" },
+};
+
+// Reference speed points used by the scatter and the KPI tiles.
+const REF = {
+  mx:  { c1_0k: 204.611, c1_8k: 222.100, prefill32k: 8457, kv: "NVFP4", bpw: 4.6587,
+         stack: "Sept 9 reference image, TP4/DCP4, built-in MTP3, NVFP4 MLA KV, CUDA graphs, 4 GPUs at 300 W, +6000 MHz memory",
+         kldKey: "NVFP4", xRange: null },
+  tr3: { c1_0k: 145.4916, prefill32k: 6225, kv: "NVFP4", bpw: 4.0,
+         stack: "v84 card, TP2/EP2/DCP2, external DFlash2-7 draft, NVFP4 MLA KV, 2 Workstation GPUs at 600 W, +6000 MHz memory",
+         kldKey: "NVFP4", xRange: null },
+  nv:  { c1_0k: 252.878, prefill32k: 9421, kv: "FP8", bpw: 4.5,
+         stack: "Jovian r7, TP4/DCP1, external DFlash2 K7 draft, FP8 MLA KV, batch 4096, 4 GPUs at 300/300/300/275 W, +6000 MHz memory",
+         kldKey: "FP8", xRange: [125.827, 261.383], samples: [261.383, 125.827, 252.878] },
+};
+
+// C1 decode by nominal context (tokens/s).
+const CTX = ["0K", "8K", "16K", "32K", "64K", "128K", "240K"];
+const LINES = [
+  { id: "mx_ref", fam: "mx", dash: false, label: "TrellisMX · reference TP4/DCP4 · MTP3 · 4×300 W",
+    pts: { "0K": 204.611, "8K": 222.100, "16K": 216.636, "32K": 204.930, "64K": 199.446, "128K": 204.445 },
+    src: "HF TrellisMX card, results/speed-20260909" },
+  { id: "tr3_v84", fam: "tr3", dash: false, label: "TR3/EXL3 · v84 TP2 · DFlash2-7 · 2×600 W",
+    pts: { "0K": 145.4916, "32K": 147.2246, "64K": 151.5119 },
+    src: "HF TR3 card, runtime-results/v84/benchmarks/llm-decode-c1-clean-4096-600w.json" },
+  { id: "tr3_v93", fam: "tr3", dash: true, label: "TR3/EXL3 · v93 TP2 · MXFP8 DFlash2-7 · 2×600 W (local)",
+    pts: { "0K": 140.2, "16K": 157.8, "32K": 135.2 },
+    src: "glm53-exl3-k4-sm120/bench-v93-dflash2-split-cache/decode-c1-c8-context0-32k-600w-plus6000.json" },
+  { id: "nv_k7", fam: "nv", dash: false, label: "NVFP4 · Jovian r7 TP4/DCP1 · DFlash2 K7 · FP8 KV",
+    pts: { "0K": 252.878, "64K": 156.023, "128K": 152.133, "240K": 138.724 },
+    range: { "0K": [125.827, 261.383] },
+    src: "glm-5.3-flash-nvfp4-jovian-benchmarks (GitHub): evidence/r7 dcp1-bt4096-k7 CC1 samples (median of 3) and exact-high-context.json" },
+  { id: "nv_mtp3", fam: "nv", dash: true, label: "NVFP4 · B12X TP4/DCP4 · built-in MTP3 · FP8 KV (local)",
+    pts: { "0K": 160.887, "8K": 148.733, "16K": 151.340 },
+    src: "glm53-nvfp4-tp4-dcp4-mtp3-same-tests-600w-20260831/mtp3/benchmark/results.json" },
+];
+
+// Cold prefill, client tokens/s.
+const PREFILL = {
+  ctx: ["32K", "64K", "128K"],
+  rows: [
+    { fam: "mx",  vals: { "32K": 8457, "64K": 8443, "128K": 8323 }, note: "Sept 9 reference, expanded run", src: "HF TrellisMX card, results/speed-20260909" },
+    { fam: "tr3", vals: { "32K": 6225, "64K": 6083, "128K": 5721 }, note: "32K/64K: v84 card (client); 128K: local v93, 128,816-token prompt", src: "HF TR3 card; glm53-exl3-k4-sm120/bench-v93-dflash2-split-cache/prefill-128k-600w-plus6000.json" },
+    { fam: "nv",  vals: { "32K": 9421, "64K": 8460, "128K": 8903 }, note: "Jovian r7 DCP1 / batch 4096 / FlashKDA; 32,320-token prompt at 32K", src: "glm-5.3-flash-nvfp4-jovian-benchmarks README, exact cold prefill" },
+  ],
+};
+
+// Extra rows for the table only.
+const EXTRA_SPEED = [
+  { fam: "mx",  cfg: "Reference TP4/DCP4 MTP3, 4×300 W", metric: "C4 aggregate", vals: "0K 327.7 · 8K 318.6 · 16K 319.2 · 32K 329.3 · 64K 330.1 · 128K 334.1", src: "results/speed-20260909" },
+  { fam: "mx",  cfg: "Reference TP4/DCP4 MTP3, 4×300 W", metric: "C8 aggregate", vals: "8K 594.6 · 16K 603.0", src: "results/speed-20260909" },
+  { fam: "mx",  cfg: "Reference TP4/DCP4 MTP3, 4×300 W", metric: "KV capacity", vals: "23,562,091 tokens at 1,000,000 max length", src: "HF TrellisMX card" },
+  { fam: "mx",  cfg: "Older Sept 5 image, TP4/noEP/DCP1, MTP off, 4×300 W (not the reference image)", metric: "C1 32K target-only, five cold starts (median)", vals: "100.55 tok/s; prefill 32K 6,959 server-validated", src: "results/P8_FC1_COLD_COMPARISON_V1.md (GitHub)" },
+  { fam: "tr3", cfg: "EXL3 TP4/EP4/DCP4, MTP off, 4×300 W, five cold starts (median)", metric: "C1 32K target-only", vals: "91.22 tok/s; prefill 32K 6,239 server-validated", src: "results/P8_FC1_COLD_COMPARISON_V1.md (GitHub)" },
+  { fam: "tr3", cfg: "v93 TP2/EP2/DCP2 MXFP8 DFlash2-7, 2×600 W (local)", metric: "C4 aggregate", vals: "0K 338.4 · 16K 344.3 · 32K 340.5", src: "bench-v93-dflash2-split-cache" },
+  { fam: "tr3", cfg: "r10 TP2/EP2/DCP2 built-in MTP3, 2×300 W (local)", metric: "C1 / C4 / prefill", vals: "C1 0K 127.0 · C4 0K 225.2 · prefill 16K 4,566, 64K 4,717", src: "glm53-exl3-k4-r10-rebase/qualification/2026-09-01" },
+  { fam: "tr3", cfg: "v84 language-only MTP3 profile, 2 GPUs", metric: "KV capacity", vals: "1,376,256 tokens (DFlash2 multimodal profile: 129,473)", src: "HF TR3 card" },
+  { fam: "nv",  cfg: "Jovian r7 TP4/DCP1 DFlash2 K7, FP8 KV", metric: "C1 0K samples", vals: "261.383 · 125.827 · 252.878 (coding prompt 255.108)", src: "jovian-benchmarks README" },
+  { fam: "nv",  cfg: "Jovian r7 TP4/DCP1 DFlash2, FP8 KV", metric: "C15 sustained aggregate", vals: "K3 856.4 · K5 785.8 · K7 740.5", src: "jovian-benchmarks README" },
+  { fam: "nv",  cfg: "Jovian r7 TP4/DCP1 batch 16384 FlashKDA", metric: "Best cold prefill", vals: "16K 10,274 · 32K 10,171 · 64K 8,774 · 128K 9,123", src: "jovian-benchmarks README" },
+  { fam: "nv",  cfg: "Jovian r8 TP4/DCP4 DFlash2 K7, FP8 KV (local)", metric: "C1 / C4 / C8 / C16", vals: "C1 0K 113.9, 8K 124.5, 16K 119.0, 32K 130.3 · C4 0K 305.3 · C8 0K 420.7 · C16 0K 605.7", src: "glm53-jovian-r8-dcp4-c32-32k-20260831/results" },
+  { fam: "nv",  cfg: "Jovian r8 TP4/DCP4 built-in MTP3, FP8 KV (local)", metric: "C1 / C4 / C8 / C16", vals: "C1 0K 131.5, 8K 148.1, 16K 134.8, 32K 129.4 · C4 0K 360.9 · C8 0K 570.8 · C16 0K 811.0", src: "glm53-jovian-r8-mtp3-gmu0965-nsys-20260831/mtp3/decode/results.json" },
+  { fam: "nv",  cfg: "B12X TP4/DCP4, MTP off, FP8 KV (local)", metric: "C1 target-only", vals: "0K 95.5 · 8K 95.4 · 16K 95.5", src: "glm53-nvfp4-tp4-dcp4-mtp3-same-tests-600w-20260831/target-control" },
+  { fam: "nv",  cfg: "Jovian r8 TP4/DCP1 at 0.96 utilization", metric: "KV capacity", vals: "1,571,046 FP8 tokens (r7 DCP4: 3,910,427)", src: "jovian-benchmarks README" },
+];
+
+const NOTES = [
+  "Speed rows are each family's published reference stack on this rig, not an interleaved A/B. Speculators differ (TrellisMX: built-in MTP3; TR3 and NVFP4: external DFlash2 drafts), GPU counts differ (TR3 on two Workstation GPUs at 600 W; TrellisMX and NVFP4 on four GPUs at 300 W, one NVFP4 card at 275 W), and NVFP4 served with FP8 KV while the other two served with NVFP4 KV.",
+  "TrellisMX versus TR3 fidelity is a matched-window, true-decode comparison: same 32 already-opened conditional-fit windows, same BF16 teacher, exact token histories, 2,046 true-decode rows per window, MTP off, one server preparation per cache arm. TR3 is lower in 22 of 32 windows in each cache mode; the paired interval excludes zero for NVFP4 KV (−0.0050, 95% [−0.0107, −0.0008]) and crosses zero for FP8 KV (−0.0038, 95% [−0.0074, +0.0003]).",
+  "The stock NVFP4 KLD is on the same 32 windows and teacher but was scored from a single 2,048-token prefill pass with eager execution, the Humming MoE backend and FP8 KV. It is context, not a matched arm. Three stock preparations on the same windows measured 0.0385, 0.0389 and 0.0398; the chart shows the value cited in the public campaign report. The public repository states that no matched-bitrate NVFP4 win is claimed.",
+  "The only same-GPU-count, no-speculation pairing on record is the Sept 5 five-cold-start comparison: an older TrellisMX image decoded 100.55 tok/s at 32K C1 against 91.22 for EXL3 TP4/EP4/DCP4 (+10.2%), with prefill 6,959 versus 6,239 (+11.5%). That image is not the Sept 9 reference plotted here.",
+  "Within the same B12X MTP3 stack on four GPUs, the TrellisMX reference (199 to 222 tok/s C1) is faster than NVFP4 MTP3 (149 to 161 tok/s) at every measured context. NVFP4's speed lead comes from the external DFlash2 K7 draft at short context, where its three 0K samples spread from 126 to 261 tok/s with acceptance, and from prefill. At 64K and beyond TrellisMX C1 decode (199 to 204) is above NVFP4 K7 (139 to 156).",
+  "KLD intervals are BCa 95% over windows (20,000 resamples, seed 20260902); they describe window variability, not server-run variability. All windows are already-opened development data. None of this is final-holdout qualification, and KLD is a distribution-distance, not an answer-quality score.",
+];
+
+const SOURCES = [
+  { t: "TrellisMX model card, speed and KLD receipts", u: "https://huggingface.co/brandonmusic/GLM-5.3-Flash-TrellisMX-MXFP8", n: "revision 7d37df2e; results/speed-20260909, results/kld-reference-20260909, results/kld-tr3-20260909, results/quality-expanded-20260909" },
+  { t: "TR3 / EXL3 4bpw model card and v84 benchmark JSON", u: "https://huggingface.co/brandonmusic/GLM-5.3-Flash-tr3-4bpw", n: "revision a5fee929; runtime-results/v84/benchmarks" },
+  { t: "Campaign repository: matched-window releases, stock NVFP4 receipts, cold-start speed comparison", u: "https://github.com/brandonmmusic-max/glm53-hadamard-shapleymcg-kld", n: "main @03ff56b; releases/reference-20260909, results/P8_FULL_COUPLED_CAMPAIGN_RESULTS_20260906.md, results/P8_FC1_COLD_COMPARISON_V1.md, results/rotation-v6-blocklocal-h16, results/rotation-v7-selective-h16" },
+  { t: "Stock NVFP4 on the Jovian Judgement runtime: speed, prefill, capacity", u: "https://github.com/brandonmmusic-max/glm-5.3-flash-nvfp4-jovian-benchmarks", n: "README tables and evidence/r7 raw JSON" },
+  { t: "Stock NVFP4 checkpoint (carrier)", u: "https://huggingface.co/local-inference-lab/GLM-5.3-Flash-NVFP4/tree/520de24eabf507659eaef7c70f14fd584527facc", n: "revision 520de24e; later revisions replaced the checkpoint with a distilled version not measured here" },
+  { t: "Local run records (this rig)", u: null, n: "glm53-exl3-k4-sm120/bench-v93-dflash2-split-cache; glm53-exl3-k4-r10-rebase/qualification/2026-09-01; glm53-nvfp4-tp4-dcp4-mtp3-same-tests-600w-20260831; glm53-jovian-r8-dcp4-c32-32k-20260831; glm53-jovian-r8-mtp3-gmu0965-nsys-20260831; rotation-l3-l20-l22-cf32-v1/kld/run-trellismx-p8-rot3-cf32-stock-v1.json" },
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined && attrs[k] !== null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function text(parent, x, y, str, cls, attrs) {
+  const t = svgEl("text", Object.assign({ x, y, class: cls }, attrs || {}), parent);
+  t.textContent = str;
+  return t;
+}
+function el(tag, cls, parent) { const e = document.createElement(tag); if (cls) e.className = cls; if (parent) parent.appendChild(e); return e; }
+const fmt = (n, d) => n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtInt = n => Math.round(n).toLocaleString("en-US");
+const pct = (a, b) => (100 * (a / b - 1));
+const signed = (n, d) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmt(Math.abs(n), d);
+
+const tip = document.getElementById("tooltip");
+function showTip(html, x, y) {
+  tip.innerHTML = "";
+  tip.appendChild(html);
+  tip.style.display = "block";
+  moveTip(x, y);
+}
+function moveTip(x, y) {
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let left = x + 14, top = y + 14;
+  if (left + w > window.innerWidth - 8) left = x - w - 14;
+  if (top + h > window.innerHeight - 8) top = y - h - 14;
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+function tipBox(header, rows, footer) {
+  const box = document.createDocumentFragment();
+  if (header) { const h = el("div", "hd"); h.textContent = header; box.appendChild(h); }
+  for (const r of rows) {
+    const row = el("div", "row");
+    const k = el("span", "k"); k.style.borderColor = r.color || "transparent"; if (r.dash) k.style.borderTopStyle = "dashed"; row.appendChild(k);
+    const v = el("span", "v"); v.textContent = r.value; row.appendChild(v);
+    const n = el("span", "n"); n.textContent = r.name; row.appendChild(n);
+    box.appendChild(row);
+  }
+  if (footer) { const f = el("div", "ft"); f.textContent = footer; box.appendChild(f); }
+  return box;
+}
+function attachTip(node, build) {
+  node.classList.add("mark");
+  node.setAttribute("tabindex", "0");
+  node.addEventListener("pointermove", ev => showTip(build(), ev.clientX, ev.clientY));
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("focus", () => { const r = node.getBoundingClientRect(); showTip(build(), r.left + r.width / 2, r.top + r.height); });
+  node.addEventListener("blur", hideTip);
+}
+function legendItem(container, kind, color, label, opts) {
+  const item = el("span", "item" + (opts && opts.toggle ? " toggle" : ""), container);
+  let key;
+  if (kind === "rect") { key = el("span", "sw", item); key.style.background = color; }
+  else if (kind === "line") { key = el("span", "lk" + (opts && opts.dash ? " dash" : ""), item); key.style.borderColor = color; }
+  else if (kind === "dot") { key = el("span", "dot" + (opts && opts.hollow ? " hollow" : ""), item); key.style.background = color; key.style.borderColor = color; }
+  const t = el("span", null, item); t.textContent = label;
+  return item;
+}
+function linScale(d0, d1, r0, r1) { const f = v => r0 + (v - d0) / (d1 - d0) * (r1 - r0); f.ticks = (n) => { const step = niceStep((d1 - d0) / n); const out = []; for (let v = Math.ceil(d0 / step) * step; v <= d1 + 1e-9; v += step) out.push(+v.toFixed(10)); return out; }; return f; }
+function niceStep(raw) { const p = Math.pow(10, Math.floor(Math.log10(raw))); const m = raw / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; }
+function cssColor(v) { return getComputedStyle(document.getElementById("root")).getPropertyValue(v.replace("var(", "").replace(")", "")).trim(); }
+
+// ---------------------------------------------------------------------------
+// KPI tiles
+// ---------------------------------------------------------------------------
+function renderKPIs() {
+  const root = document.getElementById("kpis"); root.innerHTML = "";
+  const mxKldFp8 = KLD.find(k => k.fam === "mx" && k.kv === "FP8").mean;
+  const tr3KldFp8 = KLD.find(k => k.fam === "tr3" && k.kv === "FP8").mean;
+  const nvKld = KLD.find(k => k.fam === "nv").mean;
+  const tiles = [
+    { label: "TrellisMX C1 decode, 0K context", value: fmt(REF.mx.c1_0k, 0), unit: "tok/s",
+      deltas: [ { txt: "vs TR3/EXL3 " + signed(pct(REF.mx.c1_0k, REF.tr3.c1_0k), 0) + "%", good: true },
+                { txt: "vs NVFP4 K7 " + signed(pct(REF.mx.c1_0k, REF.nv.c1_0k), 0) + "%", good: false } ],
+      foot: "8K context: " + fmt(REF.mx.c1_8k, 1) + " tok/s" },
+    { label: "TrellisMX cold prefill, 32K", value: fmtInt(REF.mx.prefill32k), unit: "tok/s",
+      deltas: [ { txt: "vs TR3/EXL3 " + signed(pct(REF.mx.prefill32k, REF.tr3.prefill32k), 0) + "%", good: true },
+                { txt: "vs NVFP4 " + signed(pct(REF.mx.prefill32k, REF.nv.prefill32k), 0) + "%", good: false } ],
+      foot: "128K: " + fmtInt(8323) + " tok/s" },
+    { label: "TrellisMX mean KLD vs BF16, FP8 KV", value: fmt(mxKldFp8, 4), unit: "nats",
+      deltas: [ { txt: "vs TR3/EXL3 " + signed(pct(mxKldFp8, tr3KldFp8), 0) + "% (worse)", good: false },
+                { txt: "vs stock NVFP4 " + signed(pct(mxKldFp8, nvKld), 0) + "% (better)", good: true } ],
+      foot: "NVFP4 KV: " + fmt(KLD.find(k => k.fam === "mx" && k.kv === "NVFP4").mean, 4) + " nats" },
+    { label: "Routed-expert storage, bits/weight", value: fmt(REF.mx.bpw, 2), unit: "bpw",
+      deltas: [ { txt: "TR3/EXL3 " + fmt(REF.tr3.bpw, 2), good: null }, { txt: "NVFP4 " + fmt(REF.nv.bpw, 2) + " nominal", good: null } ],
+      foot: "17 K5 + 25 K4 layers, 177.3 GB routed sidecars" },
+  ];
+  for (const t of tiles) {
+    const tile = el("div", "tile", root);
+    el("div", "label", tile).textContent = t.label;
+    const v = el("div", "value", tile); v.textContent = t.value;
+    const u = el("span", "unit", v); u.textContent = t.unit;
+    const d = el("div", "deltas", tile);
+    for (const dd of t.deltas) { const s = el("b", dd.good === null ? "" : dd.good ? "good" : "bad", d); s.textContent = dd.txt; }
+    const f = el("div", "label", tile); f.style.marginTop = "4px"; f.textContent = t.foot;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Scatter: speed vs fidelity
+// ---------------------------------------------------------------------------
+function renderScatter() {
+  const host = document.getElementById("scatter"); host.innerHTML = "";
+  const W = 900, H = 500, m = { t: 22, r: 30, b: 56, l: 66 };
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Scatter of C1 decode speed against mean KLD for three GLM-5.3-Flash quantizations" }, host);
+  const x = linScale(80, 320, m.l, W - m.r);
+  const y = linScale(0.020, 0.052, H - m.b, m.t);
+  // grid + axes
+  const g = svgEl("g", { class: "axis" }, svg);
+  for (const v of x.ticks(7)) { svgEl("line", { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, class: "gridline" }, svg); text(g, x(v), H - m.b + 18, fmtInt(v), null, { "text-anchor": "middle" }); }
+  for (const v of y.ticks(6)) { svgEl("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), class: "gridline" }, svg); text(g, m.l - 8, y(v) + 4, v.toFixed(3), null, { "text-anchor": "end" }); }
+  svgEl("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b }, g);
+  svgEl("line", { x1: m.l, x2: m.l, y1: m.t, y2: H - m.b }, g);
+  text(svg, (m.l + W - m.r) / 2, H - 14, "C1 decode, tokens/s at nominal 0K context  →  faster", "axis-title", { "text-anchor": "middle" });
+  text(svg, 16, (m.t + H - m.b) / 2, "mean KLD, nats  ←  closer to BF16", "axis-title", { "text-anchor": "middle", transform: `rotate(-90 16 ${(m.t + H - m.b) / 2})` });
+  // frontier line through as-served points
+  const pts = ["tr3", "mx", "nv"].map(k => { const kv = REF[k].kldKey; const row = KLD.find(r => r.fam === k && r.kv === kv); return { k, x: REF[k].c1_0k, y: row.mean, row }; }).sort((a, b) => a.x - b.x);
+  svgEl("polyline", { points: pts.map(p => `${x(p.x)},${y(p.y)}`).join(" "), fill: "none", stroke: "var(--frontier)", "stroke-width": 1.5 }, svg);
+  // ideal-corner note
+  text(svg, W - m.r - 4, H - m.b - 8, "ideal corner: fast and close to BF16", "note", { "text-anchor": "end" });
+  // points
+  const labelPos = { tr3: { dx: -14, dy: -34, anchor: "end" }, mx: { dx: -14, dy: -34, anchor: "end" }, nv: { dx: 16, dy: -30, anchor: "start" } };
+  for (const p of pts) {
+    const fam = FAM[p.k], ref = REF[p.k];
+    const gp = svgEl("g", {}, svg);
+    // horizontal sample range (NVFP4)
+    if (ref.xRange) {
+      svgEl("line", { x1: x(ref.xRange[0]), x2: x(ref.xRange[1]), y1: y(p.y), y2: y(p.y), stroke: fam.color, "stroke-width": 1.5, opacity: 0.55 }, gp);
+      for (const s of ref.samples) svgEl("circle", { cx: x(s), cy: y(p.y), r: 3, fill: fam.color, opacity: 0.6 }, gp);
+    }
+    // BCa whisker
+    svgEl("line", { x1: x(p.x), x2: x(p.x), y1: y(p.row.lo), y2: y(p.row.hi), stroke: fam.color, "stroke-width": 1.5, opacity: 0.6 }, gp);
+    svgEl("line", { x1: x(p.x) - 5, x2: x(p.x) + 5, y1: y(p.row.lo), y2: y(p.row.lo), stroke: fam.color, "stroke-width": 1.5, opacity: 0.6 }, gp);
+    svgEl("line", { x1: x(p.x) - 5, x2: x(p.x) + 5, y1: y(p.row.hi), y2: y(p.row.hi), stroke: fam.color, "stroke-width": 1.5, opacity: 0.6 }, gp);
+    // other-KV marker (hollow) for mx / tr3
+    const other = KLD.find(r => r.fam === p.k && r.kv !== ref.kldKey);
+    if (other) {
+      svgEl("line", { x1: x(p.x), x2: x(p.x), y1: y(p.y), y2: y(other.mean), stroke: fam.color, "stroke-width": 1, opacity: 0.5 }, gp);
+      const oc = svgEl("g", {}, gp);
+      svgEl("circle", { cx: x(p.x), cy: y(other.mean), r: 6.5, fill: "var(--surface-1)", stroke: fam.color, "stroke-width": 2, class: "ring" }, oc);
+      text(gp, x(p.x) + (p.k === "tr3" ? -12 : 12), y(other.mean) + 4, other.kv + " KV " + other.mean.toFixed(4), "dlabel2", { "text-anchor": p.k === "tr3" ? "end" : "start" });
+      attachTip(oc, () => tipBox(fam.name + " · " + other.kv + " KV", [
+        { color: fam.color, value: other.mean.toFixed(6), name: "mean KLD, nats" },
+        { color: "transparent", value: `[${other.lo.toFixed(6)}, ${other.hi.toFixed(6)}]`, name: "BCa 95% over 32 windows" },
+      ], other.path + ". Speed run served " + ref.kldKey + " KV; this marker shares its x only for reference."));
+    }
+    // main marker
+    const mc = svgEl("g", {}, gp);
+    svgEl("circle", { cx: x(p.x), cy: y(p.y), r: 9.5, fill: "var(--surface-1)" }, mc);
+    svgEl("circle", { cx: x(p.x), cy: y(p.y), r: 7.5, fill: fam.color, class: "ring", stroke: "var(--surface-1)", "stroke-width": 2 }, mc);
+    const lp = labelPos[p.k];
+    text(gp, x(p.x) + lp.dx, y(p.y) + lp.dy, fam.name, "dlabel", { "text-anchor": lp.anchor });
+    text(gp, x(p.x) + lp.dx, y(p.y) + lp.dy + 15, `${fmt(p.x, 1)} tok/s · KLD ${p.y.toFixed(4)} · ${p.row.kv} KV`, "dlabel2", { "text-anchor": lp.anchor });
+    attachTip(mc, () => tipBox(fam.name, [
+      { color: fam.color, value: fmt(p.x, 3) + " tok/s", name: "C1 decode, 0K" + (ref.samples ? " (median of " + ref.samples.length + " samples: " + ref.samples.map(s => fmt(s, 1)).join(" / ") + ")" : "") },
+      { color: fam.color, value: p.y.toFixed(6), name: "mean KLD, " + p.row.kv + " KV" },
+      { color: "transparent", value: `[${p.row.lo.toFixed(6)}, ${p.row.hi.toFixed(6)}]`, name: "BCa 95% over 32 windows" },
+    ], ref.stack + ". " + fam.detail + "."));
+  }
+  // legend
+  const lg = document.getElementById("legend-scatter"); lg.innerHTML = "";
+  for (const k of ["mx", "tr3", "nv"]) legendItem(lg, "dot", FAM[k].color, FAM[k].name + " · KLD with the served KV cache");
+  legendItem(lg, "dot", "var(--text-muted)", "same checkpoint, FP8 KV", { hollow: true });
+  legendItem(lg, "line", "var(--text-muted)", "small dots + bar: NVFP4's three 0K decode samples");
+}
+
+// ---------------------------------------------------------------------------
+// KLD horizontal bars
+// ---------------------------------------------------------------------------
+function renderKLDBars() {
+  const host = document.getElementById("kldbars"); host.innerHTML = "";
+  const rows = KLD.slice().sort((a, b) => a.mean - b.mean);
+  const W = 600, H = 500, m = { t: 16, r: 30, b: 50, l: 190 };
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Horizontal bars of mean KLD for each quantization and KV cache" }, host);
+  const x = linScale(0, 0.056, m.l, W - m.r);
+  const band = (H - m.t - m.b) / rows.length, bh = Math.min(24, band * 0.5);
+  const g = svgEl("g", { class: "axis" }, svg);
+  for (const v of x.ticks(5)) { svgEl("line", { x1: x(v), x2: x(v), y1: m.t, y2: H - m.b, class: "gridline" }, svg); text(g, x(v), H - m.b + 18, v.toFixed(3), null, { "text-anchor": "middle" }); }
+  svgEl("line", { x1: x(0), x2: x(0), y1: m.t, y2: H - m.b }, g);
+  text(svg, (m.l + W - m.r) / 2, H - 12, "mean KL(BF16 ‖ student), nats  ·  lower is better", "axis-title", { "text-anchor": "middle" });
+  rows.forEach((r, i) => {
+    const fam = FAM[r.fam];
+    const cy = m.t + band * (i + 0.5);
+    const gb = svgEl("g", {}, svg);
+    const rect = svgEl("rect", { x: x(0), y: cy - bh / 2, width: Math.max(0, x(r.mean) - x(0) - 4), height: bh, fill: fam.color, class: "bar" }, gb);
+    // 4px rounded data-end: simulate by drawing a rounded rect clipped at baseline
+    rect.setAttribute("rx", 4); rect.setAttribute("ry", 4);
+    svgEl("rect", { x: x(0), y: cy - bh / 2, width: 6, height: bh, fill: fam.color }, gb); // square baseline end
+    // whisker
+    svgEl("line", { x1: x(r.lo), x2: x(r.hi), y1: cy, y2: cy, stroke: "var(--text-primary)", "stroke-width": 1.2, opacity: 0.55 }, gb);
+    svgEl("line", { x1: x(r.lo), x2: x(r.lo), y1: cy - 5, y2: cy + 5, stroke: "var(--text-primary)", "stroke-width": 1.2, opacity: 0.55 }, gb);
+    svgEl("line", { x1: x(r.hi), x2: x(r.hi), y1: cy - 5, y2: cy + 5, stroke: "var(--text-primary)", "stroke-width": 1.2, opacity: 0.55 }, gb);
+    if (r.other) for (const o of r.other) svgEl("line", { x1: x(o), x2: x(o), y1: cy - bh / 2 - 6, y2: cy - bh / 2 - 1, stroke: fam.color, "stroke-width": 2 }, gb);
+    // labels
+    text(svg, m.l - 10, cy - 3, fam.name, "dlabel", { "text-anchor": "end" });
+    text(svg, m.l - 10, cy + 12, r.kv + " KV" + (r.fam === "nv" ? " · prefill-scored" : " · true-decode"), "dlabel2", { "text-anchor": "end" });
+    text(svg, x(r.hi) + 8, cy + 4, r.mean.toFixed(4), "dlabel", { "text-anchor": "start" });
+    attachTip(gb, () => tipBox(fam.name + " · " + r.kv + " KV", [
+      { color: fam.color, value: r.mean.toFixed(8), name: "mean KLD, nats" },
+      { color: "transparent", value: `[${r.lo.toFixed(6)}, ${r.hi.toFixed(6)}]`, name: "BCa 95% over 32 windows" },
+      ...(r.other ? [{ color: fam.color, value: r.other.map(o => o.toFixed(4)).join(" / "), name: "other stock preparations on the same windows (ticks)" }] : []),
+    ], r.path + ". Source: " + r.src));
+  });
+  const lg = document.getElementById("legend-kld"); lg.innerHTML = "";
+  for (const k of ["mx", "tr3", "nv"]) legendItem(lg, "rect", FAM[k].color, FAM[k].name);
+  legendItem(lg, "line", "var(--text-primary)", "BCa 95% interval");
+}
+
+// ---------------------------------------------------------------------------
+// C1 decode vs context (lines)
+// ---------------------------------------------------------------------------
+const lineState = {};
+function renderLines() {
+  const host = document.getElementById("lines"); host.innerHTML = "";
+  const W = 760, H = 420, m = { t: 20, r: 165, b: 50, l: 56 };
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Single-request decode speed across context length for five configurations" }, host);
+  const xi = i => m.l + (i + 0.5) * (W - m.l - m.r) / CTX.length;
+  const y = linScale(0, 300, H - m.b, m.t);
+  const g = svgEl("g", { class: "axis" }, svg);
+  for (const v of y.ticks(6)) { svgEl("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), class: "gridline" }, svg); text(g, m.l - 8, y(v) + 4, fmtInt(v), null, { "text-anchor": "end" }); }
+  CTX.forEach((c, i) => text(g, xi(i), H - m.b + 18, c, null, { "text-anchor": "middle" }));
+  svgEl("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b }, g);
+  text(svg, (m.l + W - m.r) / 2, H - 12, "nominal context length (tokens)", "axis-title", { "text-anchor": "middle" });
+  text(svg, 14, (m.t + H - m.b) / 2, "C1 decode, tokens/s", "axis-title", { "text-anchor": "middle", transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})` });
+  const layer = svgEl("g", {}, svg);
+  const endLabels = [];
+  for (const s of LINES) {
+    if (lineState[s.id] === false) continue;
+    const fam = FAM[s.fam];
+    const pts = CTX.map((c, i) => s.pts[c] !== undefined ? { i, c, v: s.pts[c] } : null).filter(Boolean);
+    const gs = svgEl("g", {}, layer);
+    svgEl("polyline", { points: pts.map(p => `${xi(p.i)},${y(p.v)}`).join(" "), fill: "none", stroke: fam.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", "stroke-dasharray": s.dash ? "6 5" : null }, gs);
+    for (const p of pts) {
+      if (s.range && s.range[p.c]) {
+        const r = s.range[p.c];
+        svgEl("line", { x1: xi(p.i), x2: xi(p.i), y1: y(r[0]), y2: y(r[1]), stroke: fam.color, "stroke-width": 1.5, opacity: 0.55 }, gs);
+        svgEl("line", { x1: xi(p.i) - 5, x2: xi(p.i) + 5, y1: y(r[0]), y2: y(r[0]), stroke: fam.color, "stroke-width": 1.5, opacity: 0.55 }, gs);
+        svgEl("line", { x1: xi(p.i) - 5, x2: xi(p.i) + 5, y1: y(r[1]), y2: y(r[1]), stroke: fam.color, "stroke-width": 1.5, opacity: 0.55 }, gs);
+      }
+      const mk = svgEl("g", {}, gs);
+      svgEl("circle", { cx: xi(p.i), cy: y(p.v), r: 12, fill: "transparent" }, mk); // hit area
+      svgEl("circle", { cx: xi(p.i), cy: y(p.v), r: 5, fill: s.dash ? "var(--surface-1)" : fam.color, stroke: s.dash ? fam.color : "var(--surface-1)", "stroke-width": 2, class: "ring" }, mk);
+      attachTip(mk, () => tipBox(s.label, [
+        { color: fam.color, dash: s.dash, value: fmt(p.v, 1) + " tok/s", name: "C1 decode at " + p.c + (s.range && s.range[p.c] ? " (median; samples " + s.range[p.c].map(v => fmt(v, 1)).join(" to ") + ")" : "") },
+      ], "Source: " + s.src));
+    }
+    const last = pts[pts.length - 1];
+    if (!s.dash) endLabels.push({ px: xi(last.i), py: y(last.v), y: y(last.v), txt: fam.short + " " + fmt(last.v, 0) + " (" + last.c + ")", color: fam.color });
+  }
+  // end labels for the solid reference series only, in a right-margin column with leader lines
+  const labelX = W - m.r + 10;
+  endLabels.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < endLabels.length; i++) if (endLabels[i].y - endLabels[i - 1].y < 15) endLabels[i].y = endLabels[i - 1].y + 15;
+  for (const L of endLabels) {
+    svgEl("line", { x1: L.px + 8, y1: L.py, x2: labelX - 4, y2: L.y, stroke: "var(--text-muted)", "stroke-width": 1, opacity: 0.6 }, svg);
+    text(svg, labelX, L.y + 4, L.txt, "dlabel2", { "text-anchor": "start" });
+  }
+  // crosshair + column tooltip
+  const cross = svgEl("line", { x1: 0, x2: 0, y1: m.t, y2: H - m.b, stroke: "var(--text-muted)", "stroke-width": 1, opacity: 0 }, svg);
+  const overlay = svgEl("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, svg);
+  overlay.addEventListener("pointermove", ev => {
+    const rect = svg.getBoundingClientRect();
+    const px = (ev.clientX - rect.left) * (W / rect.width);
+    let best = 0, bd = 1e9; CTX.forEach((c, i) => { const d = Math.abs(xi(i) - px); if (d < bd) { bd = d; best = i; } });
+    cross.setAttribute("x1", xi(best)); cross.setAttribute("x2", xi(best)); cross.setAttribute("opacity", 0.6);
+    const rows = LINES.filter(s => lineState[s.id] !== false && s.pts[CTX[best]] !== undefined).map(s => ({ color: FAM[s.fam].color, dash: s.dash, value: fmt(s.pts[CTX[best]], 1), name: s.label }));
+    if (rows.length) showTip(tipBox("C1 decode at " + CTX[best] + " context, tok/s", rows, null), ev.clientX, ev.clientY); else hideTip();
+  });
+  overlay.addEventListener("pointerleave", () => { cross.setAttribute("opacity", 0); hideTip(); });
+  // legend with toggles
+  const lg = document.getElementById("legend-lines"); lg.innerHTML = "";
+  for (const s of LINES) {
+    const item = legendItem(lg, "line", FAM[s.fam].color, s.label, { toggle: true, dash: s.dash });
+    if (lineState[s.id] === false) item.classList.add("off");
+    item.setAttribute("role", "button"); item.setAttribute("tabindex", "0");
+    const toggle = () => { lineState[s.id] = lineState[s.id] === false ? true : false; renderLines(); };
+    item.addEventListener("click", toggle); item.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prefill grouped columns
+// ---------------------------------------------------------------------------
+function renderPrefill() {
+  const host = document.getElementById("prefill"); host.innerHTML = "";
+  const W = 760, H = 420, m = { t: 20, r: 20, b: 50, l: 64 };
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Grouped columns of cold prefill throughput at 32K, 64K and 128K context" }, host);
+  const y = linScale(0, 10000, H - m.b, m.t);
+  const g = svgEl("g", { class: "axis" }, svg);
+  for (const v of y.ticks(5)) { svgEl("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), class: "gridline" }, svg); text(g, m.l - 8, y(v) + 4, fmtInt(v), null, { "text-anchor": "end" }); }
+  svgEl("line", { x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b }, g);
+  text(svg, (m.l + W - m.r) / 2, H - 12, "prompt length", "axis-title", { "text-anchor": "middle" });
+  text(svg, 14, (m.t + H - m.b) / 2, "cold prefill, tokens/s", "axis-title", { "text-anchor": "middle", transform: `rotate(-90 14 ${(m.t + H - m.b) / 2})` });
+  const gw = (W - m.l - m.r) / PREFILL.ctx.length, bw = 24, gap = 2;
+  PREFILL.ctx.forEach((c, ci) => {
+    const cx = m.l + gw * (ci + 0.5);
+    text(g, cx, H - m.b + 18, c, null, { "text-anchor": "middle" });
+    const n = PREFILL.rows.length, total = n * bw + (n - 1) * gap;
+    PREFILL.rows.forEach((r, ri) => {
+      const fam = FAM[r.fam], v = r.vals[c];
+      const x0 = cx - total / 2 + ri * (bw + gap);
+      const gb = svgEl("g", {}, svg);
+      const h = y(0) - y(v);
+      const rect = svgEl("rect", { x: x0, y: y(v), width: bw, height: h, fill: fam.color, rx: 4, ry: 4, class: "bar" }, gb);
+      svgEl("rect", { x: x0, y: y(0) - 6, width: bw, height: 6, fill: fam.color }, gb); // square at baseline
+      text(gb, x0 + bw / 2, y(v) - 6, fmtInt(v), "dlabel2", { "text-anchor": "middle" });
+      attachTip(gb, () => tipBox(fam.name + " · " + c + " prompt", [ { color: fam.color, value: fmtInt(v) + " tok/s", name: "cold prefill, client-measured" } ], r.note + ". Source: " + r.src));
+    });
+  });
+  const lg = document.getElementById("legend-prefill"); lg.innerHTML = "";
+  for (const r of PREFILL.rows) legendItem(lg, "rect", FAM[r.fam].color, FAM[r.fam].name + " · " + r.note.split(";")[0]);
+}
+
+// ---------------------------------------------------------------------------
+// Table view
+// ---------------------------------------------------------------------------
+function renderTables() {
+  const host = document.getElementById("tables"); host.innerHTML = "";
+  const card1 = el("div", "card", host);
+  el("h2", null, card1).textContent = "Fidelity: mean KL(BF16 ‖ student) on the same 32 conditional-fit windows";
+  let t = el("table", "data", card1);
+  t.innerHTML = "<thead><tr><th>Checkpoint</th><th>KV cache</th><th class='num'>Mean KLD (nats)</th><th class='num'>BCa 95% low</th><th class='num'>BCa 95% high</th><th>Scoring path</th><th>Source</th></tr></thead>";
+  let tb = el("tbody", null, t);
+  for (const r of KLD) {
+    const tr = el("tr", null, tb);
+    [FAM[r.fam].name, r.kv, r.mean.toFixed(8), r.lo.toFixed(6), r.hi.toFixed(6), r.path + (r.other ? "; other stock preparations on the same windows: " + r.other.map(o => o.toFixed(6)).join(", ") + " (" + r.otherSrc + ")" : ""), r.src].forEach((v, i) => { const td = el("td", i >= 2 && i <= 4 ? "num" : null, tr); td.textContent = v; });
+  }
+  const p = el("p", "desc", card1); p.style.marginTop = "8px";
+  p.textContent = "Paired per-window differences: TR3 minus TrellisMX, FP8 KV " + PAIRED.tr3_minus_mx_fp8.d.toFixed(6) + " [" + PAIRED.tr3_minus_mx_fp8.lo.toFixed(6) + ", " + PAIRED.tr3_minus_mx_fp8.hi.toFixed(6) + "]; NVFP4 KV " + PAIRED.tr3_minus_mx_nvfp4.d.toFixed(6) + " [" + PAIRED.tr3_minus_mx_nvfp4.lo.toFixed(6) + ", " + PAIRED.tr3_minus_mx_nvfp4.hi.toFixed(6) + "]. TrellisMX FP8 KV minus NVFP4 KV " + PAIRED.mx_fp8_minus_nvfp4kv.d.toFixed(6) + " [" + PAIRED.mx_fp8_minus_nvfp4kv.lo.toFixed(6) + ", " + PAIRED.mx_fp8_minus_nvfp4kv.hi.toFixed(6) + "]. Top-1 agreement with BF16: TrellisMX 94.7443% (FP8 KV) / 94.3273% (NVFP4 KV); TR3 94.9612% / 94.8100%.";
+
+  const card2 = el("div", "card", host); card2.style.marginTop = "14px";
+  el("h2", null, card2).textContent = "Speed: single-request decode by context (tokens/s)";
+  t = el("table", "data", card2);
+  t.innerHTML = "<thead><tr><th>Configuration</th>" + CTX.map(c => `<th class='num'>${c}</th>`).join("") + "<th>Source</th></tr></thead>";
+  tb = el("tbody", null, t);
+  for (const s of LINES) {
+    const tr = el("tr", null, tb);
+    el("td", null, tr).textContent = s.label;
+    for (const c of CTX) { const td = el("td", "num", tr); td.textContent = s.pts[c] !== undefined ? fmt(s.pts[c], 1) + (s.range && s.range[c] ? " (" + s.range[c].map(v => fmt(v, 1)).join(" to ") + ")" : "") : "—"; }
+    el("td", null, tr).textContent = s.src;
+  }
+  const card3 = el("div", "card", host); card3.style.marginTop = "14px";
+  el("h2", null, card3).textContent = "Speed: cold prefill (client tokens/s) and other measured cells";
+  t = el("table", "data", card3);
+  t.innerHTML = "<thead><tr><th>Checkpoint</th><th>Configuration</th><th>Metric</th><th>Values</th><th>Source</th></tr></thead>";
+  tb = el("tbody", null, t);
+  for (const r of PREFILL.rows) {
+    const tr = el("tr", null, tb);
+    [FAM[r.fam].name, r.note, "Cold prefill", PREFILL.ctx.map(c => c + " " + fmtInt(r.vals[c])).join(" · "), r.src].forEach(v => { el("td", null, tr).textContent = v; });
+  }
+  for (const r of EXTRA_SPEED) {
+    const tr = el("tr", null, tb);
+    [FAM[r.fam].name, r.cfg, r.metric, r.vals, r.src].forEach(v => { el("td", null, tr).textContent = v; });
+  }
+}
+
+function renderNotes() {
+  const ol = document.getElementById("notes-list"); ol.innerHTML = "";
+  for (const n of NOTES) { el("li", null, ol).textContent = n; }
+  const ul = document.getElementById("sources-list"); ul.innerHTML = "";
+  for (const s of SOURCES) {
+    const li = el("li", null, ul);
+    if (s.u) { const a = el("a", null, li); a.href = s.u; a.textContent = s.t; a.target = "_blank"; a.rel = "noopener"; } else { el("span", null, li).textContent = s.t; }
+    const sp = el("span", null, li); sp.textContent = " — " + s.n;
+  }
+}
+
+function renderAll() { renderKPIs(); renderScatter(); renderKLDBars(); renderLines(); renderPrefill(); renderTables(); renderNotes(); }
+renderAll();
+
+// controls
+const root = document.getElementById("root");
+document.getElementById("btn-view").addEventListener("click", function () {
+  const table = root.getAttribute("data-view") !== "table";
+  root.setAttribute("data-view", table ? "table" : "charts");
+  this.setAttribute("aria-pressed", table ? "true" : "false");
+  this.textContent = table ? "Chart view" : "Table view";
+});
+document.getElementById("btn-theme").addEventListener("click", function () {
+  const html = document.documentElement;
+  const dark = html.getAttribute("data-theme") !== "dark";
+  html.setAttribute("data-theme", dark ? "dark" : "light");
+  this.setAttribute("aria-pressed", dark ? "true" : "false");
+  this.textContent = dark ? "Light" : "Dark";
+});
+// honor ?theme=dark and ?view=table for headless rendering
+const qs = new URLSearchParams(location.search);
+if (qs.get("theme") === "dark") document.getElementById("btn-theme").click();
+if (qs.get("theme") === "light") document.documentElement.setAttribute("data-theme", "light");
+if (qs.get("view") === "table") document.getElementById("btn-view").click();
+</script>
+</body>
+</html>
