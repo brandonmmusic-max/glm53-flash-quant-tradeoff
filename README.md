@@ -25,7 +25,7 @@ All plotted values live in the `DATA` block at the top of the HTML `<script>`, w
 
 ## Method notes
 
-- KLD intervals for TrellisMX and TR3 are the published BCa 95% window intervals. The stock NVFP4 intervals were recomputed from the per-window means with the same estimator (BCa, 20,000 resamples, `numpy.random.RandomState(20260902)`); the same code reproduces the four published intervals to all printed digits.
+- KLD intervals for TrellisMX and TR3 are the published BCa 95% window intervals. The bias-corrected and accelerated (BCa) interval method is described by Bradley Efron, ["Better Bootstrap Confidence Intervals," *Journal of the American Statistical Association* 82(397), 1987](https://doi.org/10.1080/01621459.1987.10478410). The stock NVFP4 intervals were recomputed from the per-window means with the same estimator (BCa, 20,000 resamples, `numpy.random.RandomState(20260902)`); the same code reproduces the four published intervals to all printed digits.
 - Speed values are copied from the raw `llm_decode_bench` JSON (`aggregate_tps`, client `tok_per_sec`), not from rolling server logs.
 - Speed rows are each family's published reference stack, not an interleaved A/B: speculators, GPU counts and KV cache formats differ between families. The notes panel of the graph states every caveat.
 - Rendering: headless Chromium at a 1600 px viewport and device scale factor 2.
